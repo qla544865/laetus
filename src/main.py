@@ -2,7 +2,7 @@ import subprocess
 import sys
 from lexer import lexer
 from parse import *
-# from llvm_code_gen import emit_llvm, run_jit
+from llvm_code_gen import emit_llvm, run_jit
 
 def get_argv():
     flags = {}
@@ -76,28 +76,28 @@ def laetus():
 
     # ###### build exe #######
 
-    # if not ("-nocompile" in flags):
-    #     module = emit_llvm(ast)
+    if not ("-nocompile" in flags):
+        module = emit_llvm(ast)
 
-    #     with open("temp.ll","w",encoding="utf-8") as f:
-    #         f.write(str(module))
+        with open("temp.ll","w",encoding="utf-8") as f:
+            f.write(str(module))
 
 
-    #     output_file = "a.exe"
+        output_file = "a.exe"
 
-    #     if ("-o" in flags):
-    #         output_file = flags["-o"]["inp"]
+        if ("-o" in flags):
+            output_file = flags["-o"]["inp"]
 
-    #     subprocess.check_call([
-    #         "clang",
-    #         "temp.ll",
-    #         "-O2",
-    #         "-o",
-    #         output_file
-    #     ])
-    # if "-jit" in flags:
-    #     module = emit_llvm(ast)
-    #     run_jit(module)
+        subprocess.check_call([
+            "clang",
+            "temp.ll",
+            "-O2",
+            "-o",
+            output_file
+        ])
+    if "-jit" in flags:
+        module = emit_llvm(ast)
+        run_jit(module)
 
 
 

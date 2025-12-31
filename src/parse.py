@@ -61,7 +61,7 @@ class Parser:
         if self.is_identifier("print") or self.is_identifier("println"):
             return self.parse_print()
         if self.is_identifier("if"):
-            return self.parse_for()
+            return self.parse_if()
         if self.is_identifier("while"):
             return self.parse_while()
         if self.is_identifier("for"):
@@ -114,24 +114,25 @@ class Parser:
 
         expr =  []
 
+        condition_node = Node(ConditionToken())
         op_node = Node(Token())
         
         while not self.is_identifier("do") and self.pos < self.size:
             if self.is_type(TokType.operator) and self.current().operator in compare_operators:
                 expr = build_expression_tree(expr)
-                op_node = Node(self.advance())
+                op_node.data = self.advance()
                 op_node.children.extend(expr)
                 expr = []
 
             expr.append(self.advance())
 
-            if self.is_identifier("then"):
+            if self.is_identifier("do"):
                 expr = build_expression_tree(expr)
                 op_node.children.extend(expr)
-
-                condition_node = Node(ConditionToken())
-                condition_node.add_children(op_node)
-                while_node.add_children(condition_node)
+                print
+        
+        condition_node.add_children(op_node)
+        while_node.add_children(condition_node)
 
         block_node = Node(BlockToken("WhileBlock"))
         block_child =  self.get_block(end_keyword=["end"])
@@ -143,6 +144,50 @@ class Parser:
 
 
         return while_node
+
+    def parse_if(self):
+        if_node = Node(self.advance())
+
+        expr =  []
+
+        condition_node = Node(ConditionToken())
+        op_node = Node(Token())
+        
+        while not self.is_identifier("then") and self.pos < self.size:
+            if self.is_type(TokType.operator) and self.current().operator in compare_operators:
+                expr = build_expression_tree(expr)
+                op_node.data = self.advance()
+                op_node.children.extend(expr)
+                expr = []
+
+            expr.append(self.advance())
+
+            if self.is_identifier("then"):
+                expr = build_expression_tree(expr)
+                op_node.children.extend(expr)
+                print
+        
+        condition_node.add_children(op_node)
+        if_node.add_children(condition_node)
+
+        block_node = Node(BlockToken("IfBlock"))
+        block_child =  self.get_block(end_keyword=["else","end"])
+        block_node.children = block_child
+        if_node.add_children(block_node)
+        
+        if self.is_identifier("else"):
+            self.advance()
+            block_node = Node(BlockToken("ElseBlock"))
+            block_child =  self.get_block(end_keyword=["end"])
+            block_node.children = block_child
+            if_node.add_children(block_node)
+
+
+        if self.is_identifier("end"):
+            self.advance()
+
+
+        return if_node
 
     def parse_for(self):
         for_node = Node(self.advance())
