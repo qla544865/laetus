@@ -2,6 +2,7 @@ import PyInstaller.__main__
 import shutil
 import os
 
+
 FOLDER_RELEASE = "release"
 PLATFORM = "window"
 
