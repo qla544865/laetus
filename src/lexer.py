@@ -103,7 +103,7 @@ def lexer(code:str):
             elif (
                     c == "+" or c == "-" or c == "*" or \
                     c == "/" or c == "=" or c == "<" or \
-                    c == ">"
+                    c == ">" or c == "%" or c == "^"
                 ):
                 if tok != "":
                     if state == TokType.identifier:

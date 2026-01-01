@@ -26,19 +26,20 @@ class Operators(enum.Enum):
     multiply        = 112
     divide          = 113
     remainder       = 114
+    power           = 115
 
-    equals          = 115
+    equals          = 116
 
-    same            = 116
-    different       = 117
+    same            = 117
+    different       = 118
 
-    less            = 118
-    greater         = 119
-    less_same       = 120
-    greater_same    = 121
+    less            = 119
+    greater         = 120
+    less_same       = 121
+    greater_same    = 122
 
-    left_paren    = 122
-    right_paren    = 123
+    left_paren      = 123
+    right_paren     = 124
 
 
 
@@ -51,6 +52,8 @@ operators_ = {
     "-": Operators.subtract,
     "*": Operators.multiply,
     "/": Operators.divide,
+    "%": Operators.remainder,
+    "^": Operators.power,
     "=": Operators.equals,
     "==": Operators.same,
     "!=": Operators.different,
@@ -68,6 +71,8 @@ operators_vis = {
     Operators.subtract:     "sub",
     Operators.multiply:     "mul",
     Operators.divide:       "div",
+    Operators.remainder:    "remainder",
+    Operators.power:        "pow",
     Operators.equals:       "equal",
     Operators.same:         "==",
     Operators.different:    "!=",

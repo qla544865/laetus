@@ -66,10 +66,16 @@ class Parser:
             return self.parse_while()
         if self.is_identifier("for"):
             return self.parse_for()
-        elif tok.type == TokType.identifier and \
-                self.pos+1 < self.size      and \
-                self.tokens[self.pos+1].type == TokType.operator and self.tokens[self.pos+1].operator == Operators.equals:
-            return self.parse_assignment()
+        if self.is_identifier("func"):
+            return self.parse_function()
+        if self.is_identifier("return"):
+            return self.parse_return()
+        if tok.type == TokType.identifier and self.pos+1 < self.size:
+            if self.tokens[self.pos+1].type == TokType.operator:
+                if self.tokens[self.pos+1].operator == Operators.equals:
+                    return self.parse_assignment()
+                if self.tokens[self.pos+1].operator == Operators.left_paren:
+                    return self.parse_call_func()
         
         return None
 
@@ -86,6 +92,9 @@ class Parser:
             print_node.children.extend(res)
             
         return print_node
+
+    def parse_return(self):
+        return self.parse_print()
 
     def parse_assignment(self):
         assignment_node = Node(AssignmentToken())
@@ -220,6 +229,66 @@ class Parser:
 
 
         return for_node
+
+    def parse_function(self):
+        self.pos += 1
+        def_func_node = Node(DefFunctionToken())
+        func_node = Node(self.advance())
+        def_func_node.add_children(func_node)
+        parameter = Node(ParameterToken())
+        expr =  []
+
+        self.advance()
+
+        while not (self.current().type == TokType.operator and self.current().operator == Operators.right_paren) and self.pos < self.size:
+            if self.is_identifier("Comma"):
+                expr = build_expression_tree(expr)
+                parameter.children.extend(expr)
+                expr = []
+                self.advance()
+            expr.append(self.advance())
+            if (self.current().type == TokType.operator and self.current().operator == Operators.right_paren):
+                expr = build_expression_tree(expr)
+                parameter.children.extend(expr)
+
+                def_func_node.add_children(parameter)
+                break
+
+        block_node = Node(BlockToken("FuncBlock"))
+        block_child =  self.get_block(end_keyword=["end"])
+        block_node.children = block_child
+        def_func_node.add_children(block_node)
+
+        if self.is_identifier("end"):
+            self.advance()
+
+
+        return def_func_node
+
+    def parse_call_func(self):
+        def_func_node = Node(FunctionToken())
+        func_node = Node(self.advance())
+        def_func_node.add_children(func_node)
+        parameter = Node(ParameterToken())
+        expr =  []
+
+        self.advance()
+
+        while not (self.current().type == TokType.operator and self.current().operator == Operators.right_paren) and self.pos < self.size:
+            if self.is_identifier("Comma"):
+                expr = build_expression_tree(expr)
+                parameter.children.extend(expr)
+                expr = []
+                self.advance()
+            expr.append(self.advance())
+            if (self.current().type == TokType.operator and self.current().operator == Operators.right_paren):
+                expr = build_expression_tree(expr)
+                parameter.children.extend(expr)
+
+                def_func_node.add_children(parameter)
+                break
+
+        return def_func_node
 
 
 
