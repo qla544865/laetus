@@ -58,11 +58,8 @@ def laetus():
 
     ast = parse(tokens)
 
-    print_tree(ast)
-    
-
-    # if "-dev" in flags:
-    #     print_tree(ast)
+    if "-dev" in flags:
+        print_tree(ast)
 
     # ####### JIT #######
 
@@ -89,12 +86,13 @@ def laetus():
             output_file = flags["-o"]["inp"]
 
         subprocess.check_call([
-            "clang",
-            "temp.ll",
-            "-O2",
-            "-o",
-            output_file
-        ])
+                "clang",
+                "temp.ll",
+                "-O2",
+                "-o",
+                output_file
+            ], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL
+        )
     if "-jit" in flags:
         module = emit_llvm(ast)
         run_jit(module)

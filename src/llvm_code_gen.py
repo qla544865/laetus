@@ -419,7 +419,6 @@ def emit_llvm(ast):
 
 def run_jit(llvm_ir):
     """JIT Runner với hỗ trợ gọi hàm main"""
-    print("\n[JIT] Preparing execution...")
     
     # 1. Parse IR
     try:
@@ -443,9 +442,6 @@ def run_jit(llvm_ir):
             # main trả về int32
             c_main = ctypes.CFUNCTYPE(ctypes.c_int32)(func_ptr)
             
-            print("[JIT] Running code...\n" + "-"*20)
             res = c_main()
-            print("-" * 20)
-            print(f"[JIT] Program exited with code: {res}")
         except Exception as e:
             print(f"[JIT Error] Execution failed: {e}")
