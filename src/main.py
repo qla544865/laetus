@@ -8,7 +8,6 @@ def get_argv():
     flags = {}
     input_file = ""
 
-
     i = 0
     while i < len(sys.argv):
         arg = sys.argv[i]
@@ -17,19 +16,17 @@ def get_argv():
             if (arg == "-o"):
                 flags[arg]["inp"] = sys.argv[i+1]
                 i+=1
-
         else:
-            input_file = arg
+            if input_file == "":
+                input_file = arg
         i+=1
 
-    input_file = "test\\main.txt"
     if input_file == "":
         print("ERROR:","No input file.")
     return [input_file, flags]
 
 
 def laetus():
-
     file_name,flags = get_argv()
 
     file_content = ""
