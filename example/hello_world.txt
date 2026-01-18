@@ -1,0 +1,7 @@
+println "hello world!"
+
+print 3667
+
+println 3.14
+
+print 3*2+1

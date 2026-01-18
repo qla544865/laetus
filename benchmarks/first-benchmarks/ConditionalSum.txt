@@ -1,0 +1,9 @@
+i = 0
+sum = 0
+while i < 10000000 do
+    if i < 10000000 then
+        sum = sum + 1
+    endif
+    i = i + 1
+end
+println sum

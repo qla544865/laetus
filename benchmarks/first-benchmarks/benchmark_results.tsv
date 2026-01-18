@@ -1,0 +1,6 @@
+Benchmark	JIT(s)	EXE(s)
+Branching.txt	0.015023	0.257823
+ConditionalSum.txt	0.024947	0.268537
+fib.txt	4.290239	2.491324
+LoopArithmetic.txt	0.022487	0.414684
+RealisticWorkload.txt	0.011090	0.113665

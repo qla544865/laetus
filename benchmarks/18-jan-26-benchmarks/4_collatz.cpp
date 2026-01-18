@@ -1,0 +1,2 @@
+#include <iostream>
+int main(){ int m_s=0; for(int i=1;i<=100000;i++){ long long c=i; int s=0; while(c>1){ if(c%2==0) c/=2; else c=3*c+1; s++; } if(s>m_s) m_s=s; } std::cout<<m_s<<std::endl; return 0; }

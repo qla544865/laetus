@@ -1,0 +1,13 @@
+count = 0
+for i = 2, 10000, 1 do
+    isP = 1
+    j = 2
+    while j * j <= i do
+        if (i - (i/j)*j) == 0 then
+            isP = 0
+        end
+        j = j + 1
+    end
+    if isP == 1 then count = count + 1 end
+end
+println count

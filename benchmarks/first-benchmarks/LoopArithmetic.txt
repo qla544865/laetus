@@ -1,0 +1,7 @@
+j = 0
+sum = 0
+while j < 10000000 do
+    sum = sum + j
+    j = j + 1
+end
+println sum

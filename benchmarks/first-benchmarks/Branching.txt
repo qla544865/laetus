@@ -1,0 +1,11 @@
+i = 0
+cnt = 0
+while i < 5000000 do
+    if i < 2500000 then
+        cnt = cnt + 1
+    else
+        cnt = cnt + 2
+    endif
+    i = i + 1
+end
+println cnt

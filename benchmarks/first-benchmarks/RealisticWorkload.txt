@@ -1,0 +1,11 @@
+i = 0
+a = 0
+while i < 3000000 do
+    if i < 1500000 then
+        a = a + i
+    else
+        a = a - 1
+    endif
+    i = i + 1
+end
+println a

@@ -1,0 +1,7 @@
+func fib(x)
+    if x < 2 then
+        return 1
+    end
+    return fib(x-1) + fib(x-2)
+end
+println fib(35)

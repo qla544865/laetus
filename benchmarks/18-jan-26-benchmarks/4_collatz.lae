@@ -1,0 +1,15 @@
+max_s = 0
+for i = 1, 100000, 1 do
+    s = 0
+    curr = i
+    while curr > 1 do
+        if (curr - (curr/2)*2) == 0 then 
+            curr = curr / 2
+        else 
+            curr = 3 * curr + 1
+        end
+        s = s + 1
+    end
+    if s > max_s then max_s = s end
+end
+println max_s

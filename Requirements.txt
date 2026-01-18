@@ -1,0 +1,7 @@
+altgraph==0.17.5
+llvmlite==0.41.1
+packaging==25.0
+pefile==2024.8.26
+pyinstaller==6.17.0
+pyinstaller-hooks-contrib==2025.11
+pywin32-ctypes==0.2.3

@@ -1,0 +1,15 @@
+prev1 = 0
+prev2 = 1
+
+n = 100000
+i = 0
+
+while i < n do
+    new = prev2 + prev1
+
+    prev1 = prev2
+    prev2 = new
+
+    println prev2
+    i = i + 1
+end
