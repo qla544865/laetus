@@ -2,6 +2,7 @@ from llvmlite import ir, binding
 from const import TokType, Operators
 from node import Node
 import ctypes
+import os
 
 # Initialize JIT environment
 binding.initialize()
@@ -51,6 +52,10 @@ class LLVMCodeGen:
         # fflush(stream)
         fflush_ty = ir.FunctionType(ir.IntType(32), [voidptr_ty])
         self.fflush = ir.Function(self.module, fflush_ty, name="fflush")
+
+        # pow(double, double) -> Lũy thừa
+        pow_ty = ir.FunctionType(ir.DoubleType(), [ir.DoubleType(), ir.DoubleType()])
+        self.pow = ir.Function(self.module, pow_ty, name="pow")
 
         # --- FORMAT STRINGS ---
         self.fmt_int = self._global_string("%lld")
@@ -107,7 +112,6 @@ class LLVMCodeGen:
 
     def generate_ir(self, root_node: Node):
         # 1. First Pass: Define User Functions (Global Scope)
-        # We process function definitions BEFORE creating main
         for child in root_node.children:
             if child.data.type == TokType.def_function:
                 self.visit_def_function(child)
@@ -143,12 +147,10 @@ class LLVMCodeGen:
 
         # --- FUNCTIONS ---
         elif tok.type == TokType.def_function:
-            # Should have been handled in generate_ir pass 1, 
-            # but if nested (not supported logic but safety check), ignore or handle.
             return self.visit_def_function(node)
         elif tok.type == TokType.function:
             return self.visit_call_func(node)
-        if tok.type == TokType.return_stmt: # <--- Thêm xử lý Return
+        if tok.type == TokType.return_stmt: 
             return self.visit_return(node)
 
         # --- BUILT-INS ---
@@ -195,14 +197,10 @@ class LLVMCodeGen:
         
         param_names = []
         for p in param_node.children:
-            # Parse mới đảm bảo children của param là ID node
             param_names.append(p.data.func)
 
-        # Signature mới: (RetPtr*, Arg1*, Arg2*...) -> Void
         # Tham số đầu tiên luôn là pointer để chứa giá trị return
         arg_types = [self.var_struct_ty.as_pointer()] * (len(param_names) + 1)
-        
-        # Return type là Void (vì trả về qua tham số đầu tiên)
         func_ty = ir.FunctionType(ir.VoidType(), arg_types)
         
         func = ir.Function(self.module, func_ty, name=func_name)
@@ -210,7 +208,7 @@ class LLVMCodeGen:
         # Save context
         old_builder = self.builder
         old_func = self.func
-        old_ret_ptr = self.current_func_ret_ptr # Save old return ptr (cho nested func nếu có)
+        old_ret_ptr = self.current_func_ret_ptr
         
         entry = func.append_basic_block("entry")
         self.builder = ir.IRBuilder(entry)
@@ -221,7 +219,7 @@ class LLVMCodeGen:
         
         # Arg 0 là Return Slot
         func.args[0].name = "ret_slot"
-        self.current_func_ret_ptr = func.args[0] # Lưu lại để dùng trong visit_return
+        self.current_func_ret_ptr = func.args[0]
         
         # Các Arg còn lại là tham số hàm
         for i, arg in enumerate(func.args[1:]): 
@@ -230,10 +228,8 @@ class LLVMCodeGen:
             func_scope[name] = arg 
             
         self.scopes.append(func_scope)
-        
         self.visit(body_node)
         
-        # Đảm bảo block kết thúc
         if not self.builder.block.is_terminated:
             self.builder.ret_void()
             
@@ -243,19 +239,14 @@ class LLVMCodeGen:
         self.func = old_func
         self.current_func_ret_ptr = old_ret_ptr
 
-        
-
     def visit_return(self, node: Node):
-        # 1. Tính toán giá trị trả về
         val_raw = None
         if len(node.children) > 0:
             val_raw = self.visit(node.children[0])
         
-        # Extract giá trị (Type, Int, Float)
         typ, i_val, f_val = self._extract_val(val_raw)
         str_val = val_raw.get("str") if isinstance(val_raw, dict) else None
         
-        # 2. Ghi vào pointer trả về (self.current_func_ret_ptr)
         ptr = self.current_func_ret_ptr
         if ptr:
             idx0 = ir.Constant(ir.IntType(32), 0)
@@ -273,10 +264,7 @@ class LLVMCodeGen:
             elif str_val:
                  self.builder.store(str_val, p_str)
         
-        # 3. Kết thúc hàm
         self.builder.ret_void()
-
-    # ================= LOGIC MỚI: CALL FUNCTION =================
 
     def visit_call_func(self, node: Node):
         func_name = node.children[0].data.func
@@ -287,22 +275,17 @@ class LLVMCodeGen:
             return None 
         
         func_obj = self.module.globals[func_name]
-        
-        # 1. Tạo biến tạm để chứa giá trị trả về (Allocation trên Stack)
         ret_val_ptr = self.builder.alloca(self.var_struct_ty, name="call_ret_val")
         
-        # Khởi tạo giá trị 0 cho biến tạm
         zero = ir.Constant(ir.IntType(8), 0)
         t_ptr = self.builder.gep(ret_val_ptr, [ir.Constant(ir.IntType(32), 0), ir.Constant(ir.IntType(32), 0)])
         self.builder.store(zero, t_ptr)
 
-        # 2. Chuẩn bị danh sách đối số: [ret_ptr, arg1, arg2...]
         call_args = [ret_val_ptr] 
 
         for arg_expr in param_node.children:
             val_raw = self.visit(arg_expr)
             if val_raw is None: 
-                # Handle null/error case -> create dummy
                 tmp_dummy = self.builder.alloca(self.var_struct_ty)
                 call_args.append(tmp_dummy)
                 continue
@@ -328,10 +311,8 @@ class LLVMCodeGen:
             
             call_args.append(tmp_ptr)
 
-        # 3. Gọi hàm (trả về Void, nhưng ghi kết quả vào ret_val_ptr)
         self.builder.call(func_obj, call_args)
         
-        # 4. Load kết quả từ ret_val_ptr để trả về cho Expression
         idx0 = ir.Constant(ir.IntType(32), 0)
         res_type_ptr = self.builder.gep(ret_val_ptr, [idx0, ir.Constant(ir.IntType(32), 0)])
         res_int_ptr  = self.builder.gep(ret_val_ptr, [idx0, ir.Constant(ir.IntType(32), 1)])
@@ -355,7 +336,6 @@ class LLVMCodeGen:
         target_type = type_node.data.func 
         var_name = var_node.data.func
 
-        # Prompt
         if len(node.children) > 2:
             prompt_str = node.children[2].data.string_value
             prompt_ptr = self._global_string(prompt_str)
@@ -363,7 +343,6 @@ class LLVMCodeGen:
             null_ptr = ir.Constant(ir.IntType(64), 0).inttoptr(ir.IntType(8).as_pointer())
             self.builder.call(self.fflush, [null_ptr])
 
-        # Get/Create Variable
         ptr = self._get_var_ptr(var_name)
         if not ptr:
             ptr = self._create_var(var_name)
@@ -392,30 +371,24 @@ class LLVMCodeGen:
     # ================= LOGIC: ASSIGNMENT =================
 
     def visit_assignment(self, node: Node):
-        # Cấu trúc: [0]: Name, [1]: ValueNode, [2]: TypeNode (Optional)
         var_name = node.children[0].data.func
         val_node = node.children[1]
         
-        # 1. Tính toán giá trị vế phải
         result = self.visit(val_node.children[0])
         if result is None: return
         
         rhs_type, rhs_int, rhs_flt = self._extract_val(result)
 
-        # 2. Kiểm tra xem có ép kiểu "int" không (dựa vào AST child 2)
         forced_type = ""
         if len(node.children) > 2:
             forced_type = node.children[2].data.func
             
         if forced_type == "int":
-            # Ép kiểu vế phải sang Int
             new_int = self._val_to_int((rhs_type, rhs_int, rhs_flt))
             rhs_type = ir.Constant(ir.IntType(8), TYPE_INT)
             rhs_int = new_int
-            # rhs_flt không quan trọng, nhưng để an toàn có thể set về 0.0
             rhs_flt = ir.Constant(ir.DoubleType(), 0.0)
 
-        # 3. Lưu vào biến
         ptr = self._get_var_ptr(var_name)
         if not ptr:
             ptr = self._create_var(var_name)
@@ -439,7 +412,6 @@ class LLVMCodeGen:
         var_name = node.data.func
         ptr = self._get_var_ptr(var_name)
         
-        # If variable not found, return 0 (safe fallback)
         if not ptr:
             return (TYPE_INT, ir.Constant(ir.IntType(64), 0))
 
@@ -460,12 +432,10 @@ class LLVMCodeGen:
     # ================= UTILS & OPS =================
     
     def _extract_val(self, operand):
-        """Standardizes return values into (Type, Int, Float)"""
         if operand is None:
-            # Fallback for null
             return (ir.Constant(ir.IntType(8), TYPE_INT), ir.Constant(ir.IntType(64), 0), ir.Constant(ir.DoubleType(), 0.0))
             
-        if isinstance(operand, tuple): # Literal (TYPE, Value)
+        if isinstance(operand, tuple):
             typ, val = operand
             if typ == TYPE_INT:
                 return (ir.Constant(ir.IntType(8), TYPE_INT), val, ir.Constant(ir.DoubleType(), 0.0))
@@ -473,7 +443,7 @@ class LLVMCodeGen:
                 return (ir.Constant(ir.IntType(8), TYPE_FLOAT), ir.Constant(ir.IntType(64), 0), val)
             elif typ == TYPE_STR:
                 return (ir.Constant(ir.IntType(8), TYPE_STR), None, None) 
-        elif isinstance(operand, dict) and operand.get("is_var"): # Dynamic Var
+        elif isinstance(operand, dict) and operand.get("is_var"):
             return (operand["type"], operand["int"], operand["flt"])
             
         return (ir.Constant(ir.IntType(8), TYPE_INT), ir.Constant(ir.IntType(64), 0), ir.Constant(ir.DoubleType(), 0.0))
@@ -486,7 +456,6 @@ class LLVMCodeGen:
         l_type, l_int, l_flt = self._extract_val(lhs_raw)
         r_type, r_int, r_flt = self._extract_val(rhs_raw)
 
-        # Type Coercion: If either is float, operation is float
         is_l_float = self.builder.icmp_signed('==', l_type, ir.Constant(ir.IntType(8), TYPE_FLOAT))
         is_r_float = self.builder.icmp_signed('==', r_type, ir.Constant(ir.IntType(8), TYPE_FLOAT))
         is_any_float = self.builder.or_(is_l_float, is_r_float)
@@ -500,7 +469,7 @@ class LLVMCodeGen:
         res_i = ir.Constant(ir.IntType(64), 0)
         res_f = ir.Constant(ir.DoubleType(), 0.0)
 
-        # Arithmetic
+        # Arithmetic Operations
         if op == Operators.add:
             res_i = self.builder.add(l_val_i, r_val_i)
             res_f = self.builder.fadd(l_val_f, r_val_f)
@@ -513,6 +482,12 @@ class LLVMCodeGen:
         elif op == Operators.divide:
             res_i = self.builder.sdiv(l_val_i, r_val_i)
             res_f = self.builder.fdiv(l_val_f, r_val_f)
+        elif op == Operators.remainder:
+            res_i = self.builder.srem(l_val_i, r_val_i)
+            res_f = self.builder.frem(l_val_f, r_val_f)
+        elif op == Operators.power:
+            res_f = self.builder.call(self.pow, [l_val_f, r_val_f])
+            res_i = self.builder.fptosi(res_f, ir.IntType(64))
         
         # Comparision
         preds = {Operators.equals: '==', Operators.same: '==', Operators.different: '!=', 
@@ -537,21 +512,10 @@ class LLVMCodeGen:
         }
     
     def _val_to_int(self, val_data):
-        """
-        Chuyển đổi dữ liệu (Type, Int, Float) sang giá trị Int 64-bit duy nhất.
-        Nếu Type là Float, dùng lệnh fptosi để ép kiểu.
-        """
         typ, i_val, f_val = val_data
-        
-        # Kiểm tra xem type có phải là FLOAT không
         is_float = self.builder.icmp_signed('==', typ, ir.Constant(ir.IntType(8), TYPE_FLOAT))
-        
-        # Tạo lệnh ép kiểu Float -> Int
         cast_val = self.builder.fptosi(f_val, ir.IntType(64))
-        
-        # Dùng lệnh Select: Nếu là Float thì lấy cast_val, ngược lại lấy i_val
         final_int = self.builder.select(is_float, cast_val, i_val)
-        
         return final_int
 
     # ================= PRINT =================
@@ -561,40 +525,33 @@ class LLVMCodeGen:
             val_raw = self.visit(child)
             if val_raw is None: continue
 
-            # --- Xử lý String Literal ---
             if isinstance(val_raw, tuple) and val_raw[0] == TYPE_STR:
                 fmt = self.fmt_str_nl if is_newline else self.fmt_str
                 self.builder.call(self.printf, [fmt, val_raw[1]])
-                # FIX: Flush stdout sau khi in string
                 null_ptr = ir.Constant(ir.IntType(64), 0).inttoptr(ir.IntType(8).as_pointer())
                 self.builder.call(self.fflush, [null_ptr])
                 continue
 
-            # --- Xử lý Variable / Expression ---
             data = self._extract_val(val_raw)
             typ, i_val, f_val = data
             str_val = val_raw.get("str") if isinstance(val_raw, dict) else None
 
-            # 1. Case INT
             is_int = self.builder.icmp_signed('==', typ, ir.Constant(ir.IntType(8), TYPE_INT))
             with self.builder.if_then(is_int):
                 fmt = self.fmt_int_nl if is_newline else self.fmt_int
                 self.builder.call(self.printf, [fmt, i_val])
 
-            # 2. Case FLOAT
             is_flt = self.builder.icmp_signed('==', typ, ir.Constant(ir.IntType(8), TYPE_FLOAT))
             with self.builder.if_then(is_flt):
                 fmt = self.fmt_float_nl if is_newline else self.fmt_float
                 self.builder.call(self.printf, [fmt, f_val])
                 
-            # 3. Case STR (Var)
             if str_val:
                 is_str = self.builder.icmp_signed('==', typ, ir.Constant(ir.IntType(8), TYPE_STR))
                 with self.builder.if_then(is_str):
                     fmt = self.fmt_str_nl if is_newline else self.fmt_str
                     self.builder.call(self.printf, [fmt, str_val])
 
-            # FIX: Luôn Flush stdout sau lệnh print
             null_ptr = ir.Constant(ir.IntType(64), 0).inttoptr(ir.IntType(8).as_pointer())
             self.builder.call(self.fflush, [null_ptr])
 
@@ -603,10 +560,9 @@ class LLVMCodeGen:
     def visit_if(self, node: Node):
         cond_raw = self.visit(node.children[0])
         data = self._extract_val(cond_raw)
-        
-        # Check != 0
+
         bool_val = self.builder.icmp_signed('!=', data[1], ir.Constant(ir.IntType(64), 0))
-        
+
         then_block = self.func.append_basic_block("if.then")
         merge_block = self.func.append_basic_block("if.end")
         else_node = node.children[2] if len(node.children) > 2 else None
@@ -623,17 +579,17 @@ class LLVMCodeGen:
             self.builder.position_at_end(else_block)
             self.visit(else_node)
             if not self.builder.block.is_terminated: self.builder.branch(merge_block)
-            
+    
         self.builder.position_at_end(merge_block)
 
     def visit_while(self, node: Node):
         cond_block = self.func.append_basic_block("while.cond")
         body_block = self.func.append_basic_block("while.body")
         end_block = self.func.append_basic_block("while.end")
-        
+
         self.builder.branch(cond_block)
         self.builder.position_at_end(cond_block)
-        
+
         cond_raw = self.visit(node.children[0].children[0])
         data = self._extract_val(cond_raw)
         bool_val = self.builder.icmp_signed('!=', data[1], ir.Constant(ir.IntType(64), 0))
@@ -650,23 +606,19 @@ class LLVMCodeGen:
         param = node.children[0]
         init_node = param.children[0] 
 
-        # 1. Chạy Assignment (i = 1). 
-        # Nhờ hàm visit_assignment mới, i sẽ được lưu là INT (Type=1)
         self.visit(init_node) 
         
         var_name = init_node.children[0].data.func
         
-        # 2. Lấy giá trị End (Xử lý ép kiểu an toàn)
         end_raw = self.visit(param.children[1])
         end_data = self._extract_val(end_raw)
-        end_val = self._val_to_int(end_data) # Ép 10.0 -> 10
+        end_val = self._val_to_int(end_data) 
 
-        # 3. Lấy giá trị Step (Xử lý ép kiểu an toàn)
         step_val = ir.Constant(ir.IntType(64), 1)
         if len(param.children) > 2:
             step_raw = self.visit(param.children[2])
             step_data = self._extract_val(step_raw)
-            step_val = self._val_to_int(step_data) # Ép 1.0 -> 1 (Fix lỗi step=0)
+            step_val = self._val_to_int(step_data) 
 
         cond_block = self.func.append_basic_block("for.cond")
         body_block = self.func.append_basic_block("for.body")
@@ -677,9 +629,7 @@ class LLVMCodeGen:
         # --- COND BLOCK ---
         self.builder.position_at_end(cond_block)
         
-        # Load i từ bộ nhớ
         ptr = self._get_var_ptr(var_name)
-        # Load đủ 3 thành phần để dùng _val_to_int cho an toàn
         idx0 = ir.Constant(ir.IntType(32), 0)
         t_ptr = self.builder.gep(ptr, [idx0, ir.Constant(ir.IntType(32), 0)])
         i_ptr = self.builder.gep(ptr, [idx0, ir.Constant(ir.IntType(32), 1)])
@@ -689,7 +639,6 @@ class LLVMCodeGen:
         cur_int = self.builder.load(i_ptr)
         cur_flt = self.builder.load(f_ptr)
         
-        # Chuyển i hiện tại về int để so sánh
         curr_i = self._val_to_int((cur_type, cur_int, cur_flt))
         
         cmp = self.builder.icmp_signed('<=', curr_i, end_val)
@@ -700,14 +649,9 @@ class LLVMCodeGen:
         self.visit(node.children[1]) 
         
         # --- UPDATE STEP ---
-        # Tính i mới
         new_i = self.builder.add(curr_i, step_val)
-        
-        # Store lại vào i_ptr
         self.builder.store(new_i, i_ptr)
-        # QUAN TRỌNG: Update luôn Type về INT để các lệnh print sau đó nhận diện đúng
         self.builder.store(ir.Constant(ir.IntType(8), TYPE_INT), t_ptr)
-        
         self.builder.branch(cond_block)
         
         # --- END BLOCK ---
@@ -724,6 +668,12 @@ def run_jit(llvm_ir):
     except Exception as e:
         print(f"LLVM Parse Error: {e}")
         return
+        
+    # --- JIT Library Resolver Fix (Must Load OS Libraries First) ---
+    if os.name == 'nt':
+        binding.load_library_permanently("msvcrt.dll")
+    else:
+        binding.load_library_permanently(None)
 
     target = binding.Target.from_default_triple()
     target_machine = target.create_target_machine()

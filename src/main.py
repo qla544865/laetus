@@ -68,6 +68,7 @@ def laetus():
     file_content += "\n"
 
     tokens = lexer(file_content)
+    print(tokens)
 
     if "-dev" in flags:
         print("START_TOK")

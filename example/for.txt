@@ -1,0 +1,7 @@
+for i=0, 10, 2 do
+    println i
+end
+
+for i=36, 0, -1 do
+    println i*2
+end

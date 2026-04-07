@@ -8,7 +8,6 @@ class Token:
         self.int_value: int = None
         self.float_value: float = None
         self.string_value: str = None
-        self.is_unary:bool = False
 
         self.operator: int = None
 

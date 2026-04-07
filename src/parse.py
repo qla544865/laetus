@@ -58,7 +58,6 @@ class Parser:
         tok = self.current()
 
 
-
         if self.is_identifier("print") or self.is_identifier("println"):
             return self.parse_print()
         if self.is_identifier("if"):
@@ -249,25 +248,22 @@ class Parser:
         for_node = Node(self.advance())  # 'for'
         param_node = Node(ParameterToken())
 
-        # 1. Xử lý biến đếm và giá trị khởi đầu (i = 1)
-        var_tok = self.advance() # Lấy 'i'
+        var_tok = self.advance()
         if self.current().type == TokType.operator and self.current().operator == Operators.equals:
-            self.advance() # Bỏ qua dấu '='
-        
-        # Lấy expression cho giá trị bắt đầu (đến dấu phẩy)
+            self.advance()
+
         start_expr_tokens = []
         while not self.is_identifier("Comma") and self.pos < self.size:
             start_expr_tokens.append(self.advance())
-        
-        # Tạo node Assignment: i = start_expr
+
         assign_node = Node(AssignmentToken())
         assign_node.add_children(Node(var_tok))
         val_node = Node(ValueToken())
         val_node.children.extend(build_expression_tree(start_expr_tokens))
         assign_node.add_children(val_node)
-        assign_node.add_children(Node(TypeToken("int"))) # Mặc định là int cho loop
+        assign_node.add_children(Node(TypeToken("int")))
         
-        param_node.add_children(assign_node) # Child 0 của Parameter là Assignment
+        param_node.add_children(assign_node)
 
         # 2. Xử lý giá trị kết thúc (10)
         if self.is_identifier("Comma"): self.advance()
